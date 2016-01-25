@@ -6,8 +6,11 @@
 *.rel
 *.rst
 *.sym
+*.hex
+*.ihx
+*.lk
 
-dep/*
-flash/*
-obj/*
+*/dep/*
+*/flash/*
+*/obj/*
 
