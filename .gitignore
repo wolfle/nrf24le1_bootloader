@@ -7,7 +7,7 @@
 *.rst
 *.sym
 
-*/dep/*
-*/flash/*
-*/obj/*
+dep/*
+flash/*
+obj/*
 
