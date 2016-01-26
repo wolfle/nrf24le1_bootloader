@@ -196,7 +196,7 @@ static void startFirmwareUpdate()
   movx_access_data();
   // Erase the reset of pages available to firmware.
 */
-  for (i = BOOTLOADER_PAGES; i < BOOTLOADER_PAGES+(bytes_total+FLASH_PAGE_SIZE-1)/FLASH_PAGE_SIZE ; ++i) {
+  for (i = BOOTLOADER_PAGES; i < BOOTLOADER_PAGES+FLASH_PAGES(bytes_total); ++i) {
     flash_erase_page(i);
   }
 
@@ -239,7 +239,7 @@ static void writeHexRecord()
     
   // Make sure that bytes to be written is within legal pages.
   } else */
-  if (addr+bytes < FLASH_FW_MAX_SIZE && addr >= FLASH_FW_BEGIN) {
+  if (addr+bytes < FLASH_FW_END && addr >= FLASH_FW_BEGIN) {
     // Write line to flash. 
      movx_access_code();
     flash_write_bytes(addr, temp_data, bytes);
