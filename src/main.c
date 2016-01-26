@@ -47,9 +47,6 @@ static uint8_t __xdata firmware_number = 0;
 static bool packet_received;
 static bool send_success;
 
-// Hardware id number - hard coded into boot loader. 
-static const uint8_t model_number = 0x10;
-
 // Temporary buffer in idata memory.
 static uint8_t __idata temp_data[16];
 static state_t __idata state = PINGING;
@@ -60,7 +57,6 @@ static state_t __idata state = PINGING;
 static void configureRF()
 {
   packet_received = false;
-  send_success = false;
   // Enable the radio clock
   rf_clock_enable();
   // Set pipe address
@@ -123,13 +119,14 @@ static void nrf_irq()
  * command will be placed in send_buf[0].*/
 static void send(command_t command, uint8_t size) //size includes cmd
 {
+  send_success = false;
+  packet_received = false;
  // Copy command to send buffer.
   send_buf[0] = command;
   rf_write_payload(send_buf, size);
+
   // Activate sender
   CE_H;
-  send_success = false;
-
   // Wait for radio to transmit
   irq_wait_flag(rf_irq_flag) ;
   nrf_irq();
@@ -141,7 +138,7 @@ static void send(command_t command, uint8_t size) //size includes cmd
 static void sendInitAck()
 {
   // Send model number and firmware number
-  send_buf[1] = model_number;
+  send_buf[1] = MODEL_NUM;
   send_buf[2] = flash_read_byte(FW_NUMBER); 
   send(CMD_ACK,3);
 
@@ -153,7 +150,7 @@ static void sendInitAck()
 // Will enter RECEIVING_FIRMWARE state if everything checks out.
 static void startFirmwareUpdate()
 {
-  uint8_t i, checksum = 0, reset_vector[3];
+  uint8_t i, checksum = 0;//, reset_vector[3];
               
   // Calculate checksum
   for (i = 0; i < UPDATE_START_LENGTH; i++) {
@@ -166,7 +163,7 @@ static void startFirmwareUpdate()
     return;
   }
 
-  // Get firmware size 
+  // Get firmware size, NOT including reset vector
   bytes_total = MSG_ST_BYTES;
   // Check that firmware is within legal size range.
   if (bytes_total > FLASH_FW_MAX_SIZE) {
@@ -186,7 +183,7 @@ static void startFirmwareUpdate()
   // Get firmware serial number. Will be written to NV when update complete.
   firmware_number = MSG_ST_NUMBER;
   bytes_received = 0;
-
+/*
   // Read out old reset vector.
   movx_access_code();
   flash_read_bytes(0x0000, reset_vector, 3);
@@ -198,7 +195,8 @@ static void startFirmwareUpdate()
   flash_write_bytes(0x0000, reset_vector, 3);
   movx_access_data();
   // Erase the reset of pages available to firmware.
-  for (i = 1; i < (bytes_total+FLASH_PAGE_SIZE-1)/FLASH_PAGE_SIZE ; ++i) {
+*/
+  for (i = BOOTLOADER_PAGES; i < BOOTLOADER_PAGES+(bytes_total+FLASH_PAGE_SIZE-1)/FLASH_PAGE_SIZE ; ++i) {
     flash_erase_page(i);
   }
 
@@ -231,7 +229,7 @@ static void writeHexRecord()
   for (i = 0; i < bytes; i++) {
     temp_data[i] = MSG_WR_DATA(i);
   }
-
+/*
   // This will prevent the reset vector from being overwritten. 
   if (addr == 0x0000) {
      movx_access_code();;
@@ -240,7 +238,8 @@ static void writeHexRecord()
     movx_access_data();
     
   // Make sure that bytes to be written is within legal pages.
-  } else if (addr+bytes < FLASH_FW_MAX_SIZE) {
+  } else */
+  if (addr+bytes < FLASH_FW_MAX_SIZE && addr >= FLASH_FW_BEGIN) {
     // Write line to flash. 
      movx_access_code();
     flash_write_bytes(addr, temp_data, bytes);
@@ -248,7 +247,6 @@ static void writeHexRecord()
 
   // Address is outside pages available to new firmware.
   } else {
-    // Invalid address
     send_buf[1] = ERROR_ILLEGAL_ADDRESS;
     send(CMD_NACK,2);
     return;
@@ -280,7 +278,7 @@ static void readHexRecord()
   movx_access_data();
   // If request is for reset vector, read from non-volatile mem.
   if (addr == 0x0000) {
-    flash_read_bytes(FW_RESET_OPCODE, temp_data, 3);
+    flash_read_bytes(FW_RESET_VECTOR, temp_data, 3);
   }
   // Copy to send buffer
   for (i = 0; i < bytes; i++) {
@@ -321,7 +319,6 @@ void main()
 	  	
 	  if(send_success){
 	      if (packet_received) {
-	        packet_received = false;
 	        connection_timer = 0;
 	        cmd = MSG_CMD;
 	     
@@ -418,8 +415,7 @@ void main()
 		        if (++bootloader_timer > BOOTLOADER_TIMEOUT) {
 		          bootloader_timer = 0;
 		          running = (flash_read_byte(FW_NUMBER) != 0xFF) ? false : true;
-		        }
-			  send(CMD_PING,1);
+		        }else  send(CMD_PING,1);
 		  }
 	  }else{ //host unreached
 		  if (state == PINGING) {
@@ -440,11 +436,12 @@ void main()
 		        if (++bootloader_timer > BOOTLOADER_TIMEOUT) {
 		          bootloader_timer = 0;
 		          running = (flash_read_byte(FW_NUMBER) != 0xFF) ? false : true;
-		        }
+		        }else send(CMD_PING,1);
 		      }
 			  
 		  }else {
 		      if (++connection_timer > CONNECTION_TIMEOUT) state = PINGING;
+		      send(CMD_PING,1);
 		  }
 	  }
   }
@@ -462,7 +459,7 @@ void main()
   temp_data[0] = flash_read_byte(FW_RESET_ADDR_H);
   temp_data[1] = flash_read_byte(FW_RESET_ADDR_L);
 	
-   sti(); //Should we enable irqs? or should the firmware enable it later?
+  // sti(); //Should we enable irqs? or should the firmware enable it later?
  // Jump to firmware. Goodbye!
 	((firmware_start)(((uint16_t)temp_data[0]<<8) | (temp_data[1])))();
 }
