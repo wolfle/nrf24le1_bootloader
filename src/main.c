@@ -12,16 +12,10 @@
  * 
  ******************************************************************************/
 
-//lint -e717
-//lint -e534
-//lint -e714
-//lint -e783
 
 #include "main.h"
 
 /******************************************************************************/
-
-// Typedefs:
 
 // Device states
 typedef enum {
@@ -38,7 +32,7 @@ typedef void (*firmware_start)(void);
 
 // RF Communication 
 static const uint8_t __xdata default_channels[CHANNELS_SIZE] = CHANNELS;
-static const uint8_t __xdata default_pipe_address[5] = PIPE_ADDRESS;
+static const uint8_t __xdata default_pipe_address[5] = {PIPE_ADDRESS};
 static uint8_t __xdata rcvd_buf[PAYLOAD_SIZE];
 static uint8_t __xdata send_buf[PAYLOAD_SIZE];
 static uint16_t __xdata bytes_received = 0;
@@ -60,12 +54,11 @@ static void configureRF()
   // Enable the radio clock
   rf_clock_enable();
   // Set pipe address
-  rf_set_tx_address(default_pipe_address,5);
-  rf_set_rx_address(default_pipe_address,5,0);
+  rf_set_tx_address(default_pipe_address,5); //also set addr width and pipe 0 addr
   // Set initial channelC
   rf_set_channel(default_channels[1]);
   // Enable shockburst
-  rf_enable_shockburst(dr2m,n0dbm,5,false,true); //data rate 2m, retransmit 5 times, ptx mode, powerup
+  rf_enable_shockburst(dr2m,n0dbm,5,false,true); //data rate 2m, pa=0dbm, retransmit 5 times, ptx mode, powerup
   
   //rf_power_up();
 }
@@ -387,7 +380,6 @@ void main()
 	
 	          // Host sends pong to keep connections with device.
 	          case CMD_PONG:
-	              delay_us(10000); //Host have no transfer to do, delay 10 ms to reping
 	              send(CMD_PING,1);
 	
 	            #ifdef DEBUG_LED_
@@ -410,12 +402,8 @@ void main()
 	        }
 	        // Clear command
 	        cmd = CMD_NO_CMD;
-	      }else{ //Host app do not reply
-			  state=PINGING;
-		        if (++bootloader_timer > BOOTLOADER_TIMEOUT) {
-		          bootloader_timer = 0;
-		          running = (flash_read_byte(FW_NUMBER) != 0xFF) ? false : true;
-		        }else  send(CMD_PING,1);
+	      }else{ //Host app do not reply, reping
+			send(CMD_PING,1);
 		  }
 	  }else{ //host unreached
 		  if (state == PINGING) {
@@ -423,7 +411,7 @@ void main()
 		      if (++channel_timer > CHANNEL_TIMEOUT) {
 		        channel_timer = 0;
 		        // Go to next channel
-		        ch_i = (ch_i+1)%3;
+		        ch_i = (ch_i+1)%CHANNEL_SIZE;
 		        rf_set_channel(default_channels[ch_i]);
 		
 		        #ifdef DEBUG_LED_
